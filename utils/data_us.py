@@ -245,10 +245,37 @@ def fixed_bbox(mask, class_id = 1, img_size=256):
     maxy = np.max(indices[:, 1])
     return np.array([minx, miny, maxx, maxy])
 
+def mask_gradcam_clicks(mask, gradcam, class_id=1, pos_count=3, neg_count=3):
+    gradcam_threshold = 0.3
+    
+    # Get positive points from mask using random_clicks
+    pos_pts, pos_labels = random_clicks(mask, class_id=class_id, prompts_number=pos_count)
+    print(pos_pts.size())
+    
+    # Get negative points from low GradCAM areas
+    neg_indices = np.argwhere(gradcam < gradcam_threshold)
+    if len(neg_indices) > 0:
+        neg_indices = neg_indices[:, [1, 0]]  # swap to x,y
+        neg_pts = neg_indices[np.random.choice(len(neg_indices), min(neg_count, len(neg_indices)), False)]
+        neg_labels = np.zeros(len(neg_pts), dtype=int)
+    else:
+        neg_pts, neg_labels = np.zeros((0, 2), dtype=int), np.array([], dtype=int)
+    
+    # Combine points and labels
+    if len(pos_pts) > 0 and len(neg_pts) > 0:
+        pts = np.vstack([pos_pts, neg_pts])
+        labels = np.hstack([pos_labels, neg_labels])
+    elif len(pos_pts) > 0:
+        pts, labels = pos_pts, pos_labels
+    else:
+        pts, labels = neg_pts, neg_labels
+    
+    return pts, labels
+
 def gradcam_to_binary_mask(cam, img_height, img_width):
     """Convert GradCAM to binary mask with morphological postprocessing."""
     # Hyperparameters 
-    threshold = 0.93
+    threshold = 0.9451
     morph_kernel_size = 3
     apply_opening = True
     apply_closing = True
@@ -308,7 +335,7 @@ def generate_gradcam_mask(image, model, gradcam_obj, opt):
         
         # Convert to binary mask
         binary_mask = gradcam_to_binary_mask(cam_np, h, w)
-        return binary_mask
+        return binary_mask,cam_np
     except Exception as e:
         print(f"GradCAM mask generation failed: {e}")
         # Return center-focused mask as fallback
@@ -557,9 +584,10 @@ class ImageToImage2D(Dataset):
                     pt, point_label = pos_neg_clicks(np.array(mask), class_id, pos_prompt_number=1, neg_prompt_number=1)
                     print("PN point")
                 elif self.modelname=='GradSAMUS':
-                    gradmask = generate_gradcam_mask(image, self.model, self.gradcam_obj, self.opt)
-                    pt, point_label = random_click(np.array(gradmask), class_id)  # or random_click
-                    print("grad point")
+                    gradmask,cam = generate_gradcam_mask(image, self.model, self.gradcam_obj, self.opt)
+                    # pt, point_label = random_clicks(np.array(gradmask), class_id,7)  # or random_click
+                    # visualize_gradcam_and_prompts(image, gradmask, pt, point_label, filename)
+                    pt, point_label=mask_gradcam_clicks(mask, cam, class_id=1, pos_count=7, neg_count=0)
                 elif self.modelname=='PNGradSAMUS':
                     gradmask = generate_gradcam_mask(image, self.model, self.gradcam_obj, self.opt)
                     pt,point_label = pos_neg_clicks(np.array(gradmask), class_id, pos_prompt_number=1, neg_prompt_number=1)
