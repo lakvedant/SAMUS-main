@@ -85,7 +85,7 @@ def main():
     model.to(device)
     model.train()
 
-    checkpoint = torch.load(opt.load_path)
+    checkpoint = torch.load(opt.load_path,map_location=torch.device(device))
     #------when the load model is saved under multiple GPU
     new_state_dict = {}
     for k,v in checkpoint.items():
@@ -104,8 +104,9 @@ def main():
 
     pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print("Total_params: {}".format(pytorch_total_params))
-    input = torch.randn(1, 1, args.encoder_input_size, args.encoder_input_size).cuda()
-    points = (torch.tensor([[[1, 2]]]).float().cuda(), torch.tensor([[1]]).float().cuda())
+    device = torch.device(opt.device)
+    input = torch.randn(1, 1, args.encoder_input_size, args.encoder_input_size).to(device)
+    points = (torch.tensor([[[1, 2]]]).float().to(device), torch.tensor([[1]]).float().to(device))
     flops, params = profile(model, inputs=(input, points), )
     print('Gflops:', flops/1000000000, 'params:', params)
 

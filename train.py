@@ -58,7 +58,7 @@ def main():
     parser.add_argument('-low_image_size', type=int, default=128, help='the image embedding size, 256 in SAM and MSA, 128 in SAMed and SAMUS')
     parser.add_argument('--task', default='BUSI', help='task or dataset name')
     parser.add_argument('--vit_name', type=str, default='vit_b', help='select the vit model for the image encoder of sam')
-    parser.add_argument('--sam_ckpt', type=str, default='/home/hoprus/iitm_interns_ws/lakshit/SAMUS-FT-main/SAMUS-FT/sam_vit_b_01ec64 .pth', help='Pretrained checkpoint of SAM')
+    parser.add_argument('--sam_ckpt', type=str, default='/Users/lakshitvedant/Desktop/main/checkpoints/sam_vit_b_01ec64.pth', help='Pretrained checkpoint of SAM')
     parser.add_argument('--batch_size', type=int, default=8, help='batch_size per gpu') # SAMed is 12 bs with 2n_gpu and lr is 0.005
     parser.add_argument('--n_gpu', type=int, default=1, help='total gpu')
     parser.add_argument('--base_lr', type=float, default=0.0005, help='segmentation network learning rate, 0.005 for SAMed, 0.0001 for MSA') #0.0006
@@ -107,6 +107,8 @@ def main():
     
     # register the sam model
     model = get_model(args.modelname, args=args, opt=opt)
+    
+
     opt.batch_size = args.batch_size * args.n_gpu
 
     tf_train = JointTransform2D(img_size=args.encoder_input_size, low_img_size=args.low_image_size, ori_size=opt.img_size, crop=opt.crop, p_flip=0.0, p_rota=0.5, p_scale=0.5, p_gaussn=0.0,
@@ -117,7 +119,7 @@ def main():
     trainloader = DataLoader(train_dataset, batch_size=opt.batch_size, shuffle=True, num_workers=0, pin_memory=True)
     valloader = DataLoader(val_dataset, batch_size=opt.batch_size, shuffle=False, num_workers=0, pin_memory=True)
     
-    opt.pre_trained=True
+    opt.pre_trained=False
     model.to(device)
     if opt.pre_trained:
         checkpoint = torch.load(opt.load_path)

@@ -66,16 +66,16 @@ class Config_TN3K:
 
 class Config_BUSI:
     # This dataset is for breast cancer segmentation
-    data_path = "/home/hoprus/iitm_interns_ws/lakshit/SAMUS-FT-main/SAMUS-FT/dataset"
-    data_subpath = "/home/hoprus/iitm_interns_ws/lakshit/SAMUS-FT-main/SAMUS-FT/datasetBreast-BUSI"
-    save_path = "/home/hoprus/iitm_interns_ws/lakshit/checkpoints/"
+    data_path = "/content/drive/MyDrive/US30K"
+    data_subpath = "/content/drive/MyDrive/US30K/Breast-BUSI"   
+    save_path = "/content/drive/MyDrive/SAMUS-main/checkpoints/"
     result_path = "./result/BUSI/"
     tensorboard_path = "./tensorboard/BUSI/"
-    load_path = save_path + "PNGradSAMUS_best_dice_0.9011_epoch_38.pth"
+    load_path = save_path + "GradSAMUS_best_dice_0.9015_epoch_27.pth"
     save_path_code = "_"
 
     workers = 1                         # number of data loading workers (default: 8)
-    epochs = 200                       # number of total epochs to run (default: 400)
+    epochs = 400                        # number of total epochs to run (default: 400)
     batch_size = 8                     # batch size (default: 4)
     learning_rate = 1e-4                # iniial learning rate (default: 0.001)
     momentum = 0.9                      # momntum
@@ -84,39 +84,6 @@ class Config_BUSI:
     train_split = "train-Breast-BUSI"   # the file name of training set
     val_split = "val-Breast-BUSI"       # the file name of testing set
     test_split = "test-Breast-BUSI"     # the file name of testing set
-    crop = None                         # the cropped image size
-    eval_freq = 1                       # the frequency of evaluate the model
-    save_freq = 2000                    # the frequency of saving the model
-    device = "cuda"                     # training device, cpu or cuda
-    cuda = "on"                         # switch on/off cuda option (default: off)
-    gray = "yes"                        # the type of input image
-    img_channel = 1                     # the channel of input image
-    eval_mode = "mask_slice"                 # the mode when evaluate the model, slice level or patient level
-    pre_trained = False
-    mode = "train"
-    visual = False
-    modelname = "SAM"
-
-class Config_UDIAT:
-    # This dataset is for breast cancer segmentation
-    data_path = "/home/hoprus/iitm_interns_ws/lakshit/SAMUS-FT-main/SAMUS-FT/dataset"
-    data_subpath = "/home/hoprus/iitm_interns_ws/lakshit/SAMUS-FT-main/SAMUS-FT/dataset/Breast-UDIAT"
-    save_path = "/home/hoprus/iitm_interns_ws/lakshit/checkpoints/"
-    result_path = "./result/UDIAT/"
-    tensorboard_path = "./tensorboard/UDIAT/"
-    load_path = save_path + "PNGradSAMUS_best_dice_0.9011_epoch_38.pth"
-    save_path_code = "_"
-
-    workers = 1                         # number of data loading workers (default: 8)
-    epochs = 200                       # number of total epochs to run (default: 400)
-    batch_size = 8                     # batch size (default: 4)
-    learning_rate = 1e-4                # iniial learning rate (default: 0.001)
-    momentum = 0.9                      # momntum
-    classes = 2                         # thenumber of classes (background + foreground)
-    img_size = 256                      # theinput size of model
-    train_split = "train-Breast-UDIAT"   # the file name of training set
-    val_split = "val-Breast-UDIAT"       # the file name of testing set
-    test_split = "test-Breast-UDIAT"     # the file name of testing set
     crop = None                         # the cropped image size
     eval_freq = 1                       # the frequency of evaluate the model
     save_freq = 2000                    # the frequency of saving the model
@@ -171,8 +138,6 @@ def get_config(task="US30K"):
         return Config_TN3K()
     elif task == "BUSI":
         return Config_BUSI()
-    elif task == "UDIAT":
-        return Config_UDIAT()
     elif task == "CAMUS":
         return Config_CAMUS()
     else:
