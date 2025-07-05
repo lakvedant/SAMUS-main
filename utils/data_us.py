@@ -127,6 +127,65 @@ def correct_dims(*images):
         return corr_images[0]
     else:
         return corr_images
+    
+def visualize_and_save_gradcam(image, highmask,lowmask, cam_np, filename, save_dir="visualizations"):
+    """Visualize and save GradCAM results with 5 panels."""
+    # Convert image tensor to numpy
+    if hasattr(image, 'cpu'):
+        img_np = image.cpu().numpy()
+        if len(img_np.shape) == 3:
+            img_np = np.transpose(img_np, (1, 2, 0))
+    else:
+        img_np = image
+    
+    
+    # Normalize image
+    if img_np.max() > 1:
+        img_np = img_np / 255.0
+    
+    # Handle grayscale
+    if len(img_np.shape) == 2 or img_np.shape[-1] == 1:
+        img_np = np.stack([img_np.squeeze()]*3, axis=-1)
+    
+    
+    # Create 5-panel visualization
+    fig, axes = plt.subplots(1, 5, figsize=(25, 5))
+    
+    # 1. Original image
+    axes[0].imshow(img_np, cmap='gray')
+    axes[0].set_title(f'Original Image\n{filename}')
+    axes[0].axis('off')
+    
+    
+    # 3. GradCAM heatmap (blue-red-yellow colormap)
+    axes[1].imshow(cam_np, cmap='jet')  # jet colormap gives blue-red-yellow
+    axes[1].set_title('GradCAM Heatmap')
+    axes[1].axis('off')
+    
+    # 4. GradCAM threshold binary mask
+    axes[2].imshow(highmask, cmap='gray')
+    axes[2].set_title('GradCAM High Binary Mask')
+    axes[2].axis('off')
+    
+    # 4. GradCAM threshold binary mask
+    axes[3].imshow(lowmask, cmap='gray')
+    axes[3].set_title('GradCAM Low Binary Mask')
+    axes[3].axis('off')
+    
+    plt.tight_layout()
+    
+    # Save visualization
+    os.makedirs(save_dir, exist_ok=True)
+    save_path = os.path.join(save_dir, f"gradcam_{filename.replace('.png', '')}.png")
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f"Visualization saved to: {save_path}")
+    
+    # Save individual components
+    cv2.imwrite(os.path.join(save_dir, f"binary_mask_{filename}"), highmask * 255)
+    cv2.imwrite(os.path.join(save_dir, f"low_activation_mask_{filename}"), lowmask * 255)
+    cv2.imwrite(os.path.join(save_dir, f"heatmap_{filename}"), (cam_np * 255).astype(np.uint8))
+    
+    plt.close()
 
 
 def random_click(mask, class_id=1):
@@ -257,6 +316,7 @@ def random_clicks(mask, class_id = 1, prompts_number=10):
     pt_index = np.random.randint(len(indices), size=prompts_number)
     pt = indices[pt_index]
     point_label = np.repeat(point_label, prompts_number)
+
     return pt, point_label
 
 def gradcam_low_activation_mask(cam_np, low_threshold=0.3):
@@ -278,52 +338,74 @@ def gradcam_low_activation_mask(cam_np, low_threshold=0.3):
     
     return binary_mask
 
-def mask_gradcam_clicks(mask, gradcam, class_id=1, pos_count=3, neg_count=3):
-    """Generate positive clicks from mask and negative clicks from GradCAM low activation regions."""
-    # Get positive clicks from mask
-    pos_pts, pos_labels = random_clicks(mask, class_id, pos_count)
+def mask_gradcam_clicks(highmask, lowmask, class_id=1, pos_count=3, neg_count=3):
+    """Generate positive clicks from highmask and negative clicks from lowmask."""
     
-    # Get negative clicks from GradCAM low activation regions
-    gradcam_mask = gradcam_low_activation_mask(gradcam)
-    neg_pts, _ = random_clicks(gradcam_mask, class_id=1, prompts_number=neg_count)
+    # Get positive clicks from highmask
+    pos_pts, pos_labels = random_clicks(highmask, class_id, pos_count) if pos_count > 0 else (np.zeros((0, 2), dtype=int), np.zeros(0, dtype=int))
+    
+    # Get negative clicks from lowmask  
+    neg_pts, _ = random_clicks(lowmask, class_id, neg_count) if neg_count > 0 else (np.zeros((0, 2), dtype=int), np.zeros(0, dtype=int))
+    neg_labels = np.zeros(len(neg_pts), dtype=int)
     
     # Combine points and labels
-    pts = np.vstack([pos_pts, neg_pts])
-    labels = np.hstack([pos_labels, np.zeros(neg_count, dtype=int)])
+    if len(pos_pts) > 0 and len(neg_pts) > 0:
+        pts, labels = np.vstack([pos_pts, neg_pts]), np.hstack([pos_labels, neg_labels])
+    elif len(pos_pts) > 0:
+        pts, labels = pos_pts, pos_labels
+    elif len(neg_pts) > 0:
+        pts, labels = neg_pts, neg_labels
+    else:
+        pts, labels = np.array([[highmask.shape[1]//2, highmask.shape[0]//2]]), np.array([1])
     
     return pts, labels
 
 
-def gradcam_to_binary_mask(cam, img_height, img_width):
-    """Convert GradCAM to binary mask with morphological postprocessing."""
-    # Hyperparameters 
-    threshold = 0.94
-    morph_kernel_size = 3
-    apply_opening = True
-    apply_closing = True
+def gradcam_to_dual_binary_masks(cam, img_height, img_width, high_thresh=0.94, low_thresh=0.50):
+    """
+    Convert GradCAM to dual binary masks for high and low activation points.
     
-    # Convert CAM to grayscale and normalize
+    Args:
+        cam: GradCAM heatmap
+        img_height: Target image height
+        img_width: Target image width
+        high_thresh: Threshold for high activation regions (default: 0.94)
+        low_thresh: Threshold for low activation regions (default: 0.30)
+    
+    Returns:
+        high_mask: Binary mask where high activation regions are 1
+        low_mask: Binary mask where LOW activation regions are 1 (inverted)
+    """
+    # Normalize CAM
     if len(cam.shape) > 2:
         cam_gray = cv2.cvtColor(cam, cv2.COLOR_RGB2GRAY) if cam.shape[-1] == 3 else cam.squeeze()
     else:
         cam_gray = cam
-    cam_normalized = (cam_gray - cam_gray.min()) / (cam_gray.max() - cam_gray.min())
     
-    # RESIZE CAM to match original image dimensions
+    # Ensure we have valid range for normalization
+    cam_min, cam_max = cam_gray.min(), cam_gray.max()
+    if cam_max - cam_min == 0:
+        cam_normalized = np.zeros_like(cam_gray)
+    else:
+        cam_normalized = (cam_gray - cam_min) / (cam_max - cam_min)
+    
+    # Resize to match image dimensions
     cam_resized = cv2.resize(cam_normalized, (img_width, img_height), interpolation=cv2.INTER_LINEAR)
     
-    # Apply threshold to create binary mask
-    binary_mask = (cam_resized > threshold).astype(np.uint8)
+    # Create dual binary masks
+    # High mask: regions with high activation (bright areas)
+    high_mask = (cam_resized > high_thresh).astype(np.uint8)
     
-    # Apply morphological operations (postprocessing)
-    if apply_opening or apply_closing:
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (morph_kernel_size, morph_kernel_size))
-        if apply_opening:
-            binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel)
-        if apply_closing:
-            binary_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
+    # Low mask: regions with LOW activation (dark areas) - INVERTED
+    # We want LOW activation regions to be marked as 1 (white)
+    low_mask = (cam_resized < low_thresh).astype(np.uint8)
     
-    return binary_mask
+    # Optional morphological operations to clean up masks
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+    high_mask = cv2.morphologyEx(high_mask, cv2.MORPH_CLOSE, kernel)
+    low_mask = cv2.morphologyEx(low_mask, cv2.MORPH_CLOSE, kernel)
+    
+    return high_mask, low_mask
 
 
 def generate_gradcam_mask(image, model, gradcam_obj, opt):
@@ -356,8 +438,8 @@ def generate_gradcam_mask(image, model, gradcam_obj, opt):
         cam_np = cam_np.squeeze()
         
         # Convert to binary mask
-        binary_mask = gradcam_to_binary_mask(cam_np, h, w)
-        return binary_mask,cam_np
+        high_mask,low_mask = gradcam_to_dual_binary_masks(cam_np, h, w)
+        return high_mask,low_mask,cam_np
     except Exception as e:
         print(f"GradCAM mask generation failed: {e}")
         # Return center-focused mask as fallback
@@ -606,10 +688,11 @@ class ImageToImage2D(Dataset):
                     pt, point_label = pos_neg_clicks(np.array(mask), class_id, pos_prompt_number=1, neg_prompt_number=1)
                     print("PN point")
                 elif self.modelname=='GradSAMUS':
-                    gradmask,cam = generate_gradcam_mask(image, self.model, self.gradcam_obj, self.opt)
+                    highmask,lowmask,cam = generate_gradcam_mask(image, self.model, self.gradcam_obj, self.opt)
                     # pt, point_label = random_clicks(np.array(gradmask), class_id,5)  # or random_click
                     # visualize_gradcam_and_prompts(image, gradmask, pt, point_label, filename)
-                    pt, point_label=mask_gradcam_clicks(mask, cam, class_id=1, pos_count=5, neg_count=0)
+                    pt, point_label=mask_gradcam_clicks(highmask,lowmask,class_id=1, pos_count=5, neg_count=3)
+                    # visualize_and_save_gradcam(image, highmask,lowmask, cam, filename, save_dir="visualizations")
                     print(pt,point_label)
                 elif self.modelname=='PNGradSAMUS':
                     gradmask = generate_gradcam_mask(image, self.model, self.gradcam_obj, self.opt)

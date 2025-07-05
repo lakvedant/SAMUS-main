@@ -40,7 +40,7 @@ def main():
     parser.add_argument('-low_image_size', type=int, default=128, help='the image embedding size, 256 in SAM and MSA, 128 in SAMed and SAMUS') 
     parser.add_argument('--task', default='BUSI', help='task or dataset name')
     parser.add_argument('--vit_name', type=str, default='vit_b', help='select the vit model for the image encoder of sam')
-    parser.add_argument('--sam_ckpt', type=str, default='/home/hoprus/iitm_interns_ws/lakshit/SAMUS-FT-main/SAMUS-FT/sam_vit_b_01ec64 .pth', help='Pretrained checkpoint of SAM')
+    parser.add_argument('--sam_ckpt', type=str, default='/Users/lakshitvedant/Desktop/main/checkpoints/sam_vit_b_01ec64.pth', help='Pretrained checkpoint of SAM')
     parser.add_argument('--batch_size', type=int, default=8, help='batch_size per gpu') # 8 # SAMed is 12 bs with 2n_gpu and lr is 0.005
     parser.add_argument('--n_gpu', type=int, default=1, help='total gpu')
     parser.add_argument('--base_lr', type=float, default=0.0001, help='segmentation network learning rate, 0.005 for SAMed, 0.0001 for MSA') #0.0006
